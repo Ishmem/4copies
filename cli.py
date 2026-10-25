@@ -48,10 +48,12 @@ def cmd_status(args):
 
     # 2. Policy State
     print("\n[+] 2. Active System Policies (settings.ini):")
-    print(f"    • Analytics Opt-In:     {policy_store.settings.analytics_opt_in}")
-    print(f"    • Can Access Internet:  {policy_store.settings.can_access_internet}")
-    print(f"    • Firmware Update:      {policy_store.settings.fw_update_setting}")
-    print(f"    • Telemetry Gating:     {'PERMITTED' if policy_store.is_telemetry_allowed() else 'BLOCKED'}")
+    print(f"    • Analytics Opt-In:        {policy_store.settings.analytics_opt_in}")
+    print(f"    • Can Access Internet:     {policy_store.settings.can_access_internet}")
+    print(f"    • Firmware Update:         {policy_store.settings.fw_update_setting}")
+    print(f"    • Telemetry Gating:        {'PERMITTED' if policy_store.is_telemetry_allowed() else 'BLOCKED'}")
+    print(f"    • Cartridge Auth Bypass:   {'ENABLED (DRM/rejections ignored)' if policy_store.settings.bypass_cartridge_auth else 'STRICT OEM ONLY'}")
+    print(f"    • Spoof Genuine Status:    {'ACTIVE (Faking genuine OEM)' if policy_store.settings.spoof_genuine_status else 'OFF'}")
 
     # 3. Device Profiles
     registry = DeviceRegistry(data_dir)
@@ -66,10 +68,13 @@ def cmd_policy_get(args):
     data_dir = get_data_dir(args)
     store = PolicyStore(data_dir)
     print(f"Configuration file: {store.settings_file}")
-    print(f"Analytics OptIn:     {store.settings.analytics_opt_in}")
-    print(f"Can Access Internet: {store.settings.can_access_internet}")
-    print(f"Firmware Updates:    {store.settings.fw_update_setting}")
-    print(f"Usage Tracking:      {store.settings.ut_settings}")
+    print(f"Analytics OptIn:         {store.settings.analytics_opt_in}")
+    print(f"Can Access Internet:     {store.settings.can_access_internet}")
+    print(f"Firmware Updates:        {store.settings.fw_update_setting}")
+    print(f"Usage Tracking:          {store.settings.ut_settings}")
+    print(f"Bypass Cartridge Auth:   {store.settings.bypass_cartridge_auth}")
+    print(f"Spoof Genuine Status:    {store.settings.spoof_genuine_status}")
+    print(f"Force Allow Printing:    {store.settings.force_allow_printing}")
 
 
 def cmd_policy_set(args):
@@ -87,6 +92,14 @@ def cmd_policy_set(args):
     if args.update_setting is not None:
         store.settings.fw_update_setting = args.update_setting
         print(f"Updated FWUpdateSetting -> {store.settings.fw_update_setting}")
+
+    if args.bypass_auth is not None:
+        store.settings.bypass_cartridge_auth = args.bypass_auth.lower() in ("true", "1", "yes")
+        print(f"Updated BypassAuthentication -> {store.settings.bypass_cartridge_auth}")
+
+    if args.spoof_genuine is not None:
+        store.settings.spoof_genuine_status = args.spoof_genuine.lower() in ("true", "1", "yes")
+        print(f"Updated SpoofGenuineStatus -> {store.settings.spoof_genuine_status}")
 
     store.save()
     print("Policies successfully updated and saved atomically.")
@@ -165,6 +178,8 @@ def main():
     p_pol_set.add_argument("--optin", help="true or false")
     p_pol_set.add_argument("--internet", help="true or false")
     p_pol_set.add_argument("--update-setting", help="Never, Auto, Notify")
+    p_pol_set.add_argument("--bypass-auth", help="true or false (Bypass cartridge authentication)")
+    p_pol_set.add_argument("--spoof-genuine", help="true or false (Spoof as genuine HP OEM)")
     p_pol_set.set_defaults(func=cmd_policy_set)
 
     # devices

@@ -51,7 +51,12 @@ class PrinterAssistantApp(tk.Tk):
         self.policy_store = PolicyStore(self.data_dir)
         self.registry = DeviceRegistry(self.data_dir)
         self.spooler = SpoolerManager()
-        self.ledm_status = LEDMDeviceStatus(device_name=PRODUCT_NAME)
+        self.ledm_status = LEDMDeviceStatus(
+            device_name=PRODUCT_NAME,
+            bypass_cartridge_auth=self.policy_store.settings.bypass_cartridge_auth,
+            spoof_genuine_status=self.policy_store.settings.spoof_genuine_status,
+            ignore_low_ink=self.policy_store.settings.ignore_low_ink,
+        )
 
         # Ensure default device is registered in {GUID}.ini
         if not self.registry.get_device(DEFAULT_PRODUCT_GUID):
@@ -192,68 +197,108 @@ class PrinterAssistantApp(tk.Tk):
         card = ttk.Frame(parent, style="Card.TFrame", padding=15)
         card.grid(row=0, column=1, sticky="nsew", padx=6)
 
-        tk.Label(card, text="💧 Supplies & Hardware (LEDM)", font=("Segoe UI", 12, "bold"), fg=self.COLOR_TEXT, bg=self.COLOR_CARD).pack(anchor="w", pady=(0, 10))
+        tk.Label(card, text="💧 Supplies & Cartridge Auth", font=("Segoe UI", 12, "bold"), fg=self.COLOR_TEXT, bg=self.COLOR_CARD).pack(anchor="w", pady=(0, 6))
+
+        # Auth Bypass Banner
+        self.lbl_auth_pill = tk.Label(
+            card,
+            text="🛡️ CARTRIDGE AUTH BYPASS: ACTIVE",
+            font=("Segoe UI", 8, "bold"),
+            fg="#FFFFFF",
+            bg="#8B5CF6",
+            padx=8,
+            pady=3
+        )
+        self.lbl_auth_pill.pack(fill="x", pady=(0, 10))
 
         # Black Ink
         tk.Label(card, text="Black Cartridge (HP 63)", font=("Segoe UI", 9, "bold"), fg=self.COLOR_TEXT, bg=self.COLOR_CARD).pack(anchor="w")
-        self.lbl_black_pct = tk.Label(card, text="85% - Ready", font=("Segoe UI", 8), fg=self.COLOR_MUTED, bg=self.COLOR_CARD)
+        self.lbl_black_pct = tk.Label(card, text="85% - Ready (Genuine OEM)", font=("Segoe UI", 8), fg=self.COLOR_MUTED, bg=self.COLOR_CARD)
         self.lbl_black_pct.pack(anchor="w")
         self.prog_black = ttk.Progressbar(card, style="BlackInk.Horizontal.TProgressbar", length=200, value=85)
-        self.prog_black.pack(fill="x", pady=(2, 12))
+        self.prog_black.pack(fill="x", pady=(2, 10))
 
         # Tri-Color Ink
         tk.Label(card, text="Tri-Color Cartridge (HP 63)", font=("Segoe UI", 9, "bold"), fg=self.COLOR_TEXT, bg=self.COLOR_CARD).pack(anchor="w")
-        self.lbl_color_pct = tk.Label(card, text="90% - Ready", font=("Segoe UI", 8), fg=self.COLOR_MUTED, bg=self.COLOR_CARD)
+        self.lbl_color_pct = tk.Label(card, text="90% - Ready (Genuine OEM)", font=("Segoe UI", 8), fg=self.COLOR_MUTED, bg=self.COLOR_CARD)
         self.lbl_color_pct.pack(anchor="w")
         self.prog_color = ttk.Progressbar(card, style="ColorInk.Horizontal.TProgressbar", length=200, value=90)
-        self.prog_color.pack(fill="x", pady=(2, 12))
+        self.prog_color.pack(fill="x", pady=(2, 10))
 
         # Paper Tray State
         tk.Label(card, text="Input Tray 1:", font=("Segoe UI", 9, "bold"), fg=self.COLOR_TEXT, bg=self.COLOR_CARD).pack(anchor="w")
         self.lbl_tray_status = tk.Label(card, text="Ready (Plain Paper loaded)", font=("Segoe UI", 8), fg=self.COLOR_SUCCESS, bg=self.COLOR_CARD)
-        self.lbl_tray_status.pack(anchor="w", pady=(0, 12))
+        self.lbl_tray_status.pack(anchor="w", pady=(0, 8))
 
         # Interactive Simulation Controls
-        sim_box = tk.LabelFrame(card, text="Simulate Hardware State", font=("Segoe UI", 8), bg=self.COLOR_CARD, fg=self.COLOR_MUTED, padx=6, pady=6)
-        sim_box.pack(fill="x", pady=(4, 0))
+        sim_box = tk.LabelFrame(card, text="Simulate Cartridge / Hardware States", font=("Segoe UI", 8), bg=self.COLOR_CARD, fg=self.COLOR_MUTED, padx=6, pady=6)
+        sim_box.pack(fill="x", pady=(2, 0))
 
-        btn_row = tk.Frame(sim_box, bg=self.COLOR_CARD)
-        btn_row.pack(fill="x")
-        ttk.Button(btn_row, text="Paper Out", style="Secondary.TButton", command=self._sim_paper_out).pack(side="left", expand=True, fill="x", padx=1)
-        ttk.Button(btn_row, text="Low Ink", style="Secondary.TButton", command=self._sim_low_ink).pack(side="left", expand=True, fill="x", padx=1)
-        ttk.Button(btn_row, text="Reset OK", style="Secondary.TButton", command=self._sim_reset_ok).pack(side="left", expand=True, fill="x", padx=1)
+        row1 = tk.Frame(sim_box, bg=self.COLOR_CARD)
+        row1.pack(fill="x", pady=1)
+        ttk.Button(row1, text="Non-HP / Refilled", style="Secondary.TButton", command=self._sim_non_hp).pack(side="left", expand=True, fill="x", padx=1)
+        ttk.Button(row1, text="Depleted (0%)", style="Secondary.TButton", command=self._sim_low_ink).pack(side="left", expand=True, fill="x", padx=1)
+
+        row2 = tk.Frame(sim_box, bg=self.COLOR_CARD)
+        row2.pack(fill="x", pady=1)
+        ttk.Button(row2, text="Paper Out", style="Secondary.TButton", command=self._sim_paper_out).pack(side="left", expand=True, fill="x", padx=1)
+        ttk.Button(row2, text="Reset to OEM", style="Secondary.TButton", command=self._sim_reset_ok).pack(side="left", expand=True, fill="x", padx=1)
 
     def _build_policy_card(self, parent):
         card = ttk.Frame(parent, style="Card.TFrame", padding=15)
         card.grid(row=0, column=2, sticky="nsew", padx=6)
 
-        tk.Label(card, text="🛡️ System Policies & Privacy", font=("Segoe UI", 12, "bold"), fg=self.COLOR_TEXT, bg=self.COLOR_CARD).pack(anchor="w", pady=(0, 10))
+        tk.Label(card, text="🛡️ Policies & Cartridge Bypasses", font=("Segoe UI", 12, "bold"), fg=self.COLOR_TEXT, bg=self.COLOR_CARD).pack(anchor="w", pady=(0, 6))
 
-        # Checkboxes for settings.ini
+        # Checkboxes for Cartridge Bypass
+        self.var_bypass_auth = tk.BooleanVar(value=self.policy_store.settings.bypass_cartridge_auth)
+        self.var_spoof_genuine = tk.BooleanVar(value=self.policy_store.settings.spoof_genuine_status)
         self.var_optin = tk.BooleanVar(value=self.policy_store.settings.analytics_opt_in)
         self.var_internet = tk.BooleanVar(value=self.policy_store.settings.can_access_internet)
 
-        cb1 = tk.Checkbutton(card, text="Analytics Opt-In (Telemetry)", variable=self.var_optin, bg=self.COLOR_CARD, font=("Segoe UI", 9), activebackground=self.COLOR_CARD)
-        cb1.pack(anchor="w", pady=3)
+        cb_bp = tk.Checkbutton(
+            card,
+            text="Bypass Cartridge Auth / DRM",
+            variable=self.var_bypass_auth,
+            command=self._on_bypass_toggle,
+            bg=self.COLOR_CARD,
+            font=("Segoe UI", 9, "bold"),
+            fg="#7C3AED",
+            activebackground=self.COLOR_CARD
+        )
+        cb_bp.pack(anchor="w", pady=2)
 
-        cb2 = tk.Checkbutton(card, text="Allow Internet Communication", variable=self.var_internet, bg=self.COLOR_CARD, font=("Segoe UI", 9), activebackground=self.COLOR_CARD)
-        cb2.pack(anchor="w", pady=3)
+        cb_sp = tk.Checkbutton(
+            card,
+            text="Spoof Genuine OEM to Apps",
+            variable=self.var_spoof_genuine,
+            command=self._on_bypass_toggle,
+            bg=self.COLOR_CARD,
+            font=("Segoe UI", 9),
+            activebackground=self.COLOR_CARD
+        )
+        cb_sp.pack(anchor="w", pady=2)
+
+        cb1 = tk.Checkbutton(card, text="Analytics Opt-In (Telemetry)", variable=self.var_optin, bg=self.COLOR_CARD, font=("Segoe UI", 9), activebackground=self.COLOR_CARD)
+        cb1.pack(anchor="w", pady=2)
+
+        cb2 = tk.Checkbutton(card, text="Allow Internet Access", variable=self.var_internet, bg=self.COLOR_CARD, font=("Segoe UI", 9), activebackground=self.COLOR_CARD)
+        cb2.pack(anchor="w", pady=2)
 
         # Firmware Update Setting
-        tk.Label(card, text="Firmware Updates:", font=("Segoe UI", 9), fg=self.COLOR_MUTED, bg=self.COLOR_CARD).pack(anchor="w", pady=(8, 2))
+        tk.Label(card, text="Firmware Updates:", font=("Segoe UI", 9), fg=self.COLOR_MUTED, bg=self.COLOR_CARD).pack(anchor="w", pady=(6, 2))
         self.fw_combo = ttk.Combobox(card, values=["Never", "Notify", "Auto"], state="readonly", font=("Segoe UI", 9))
         self.fw_combo.set(self.policy_store.settings.fw_update_setting)
-        self.fw_combo.pack(fill="x", pady=(0, 10))
+        self.fw_combo.pack(fill="x", pady=(0, 8))
 
         # Save Button
-        ttk.Button(card, text="💾 Save Policies to settings.ini", style="Secondary.TButton", command=self._save_policies).pack(fill="x", pady=(4, 10))
+        ttk.Button(card, text="💾 Save Policies to settings.ini", style="Secondary.TButton", command=self._save_policies).pack(fill="x", pady=(2, 8))
 
         # Device Profile GUID Info
-        dev_box = tk.Frame(card, bg="#F8FAFC", bd=1, relief="solid", padx=8, pady=6)
-        dev_box.pack(fill="x", pady=(4, 0))
+        dev_box = tk.Frame(card, bg="#F8FAFC", bd=1, relief="solid", padx=8, pady=4)
+        dev_box.pack(fill="x", pady=(2, 0))
         tk.Label(dev_box, text="Hardware Profile:", font=("Segoe UI", 8, "bold"), fg=self.COLOR_MUTED, bg="#F8FAFC").pack(anchor="w")
         tk.Label(dev_box, text=DEFAULT_PRODUCT_GUID, font=("Consolas", 7), fg=self.COLOR_TEXT, bg="#F8FAFC").pack(anchor="w")
-        tk.Label(dev_box, text="INI: {GUID}.ini in runtime_data", font=("Segoe UI", 7), fg=self.COLOR_MUTED, bg="#F8FAFC").pack(anchor="w")
 
     def _build_bottom_card(self):
         bottom_frame = tk.Frame(self, bg=self.COLOR_CARD, height=180)
@@ -315,13 +360,27 @@ class PrinterAssistantApp(tk.Tk):
 
         self._evaluate_global_status()
 
+    def _on_bypass_toggle(self):
+        bypass = self.var_bypass_auth.get()
+        spoof = self.var_spoof_genuine.get()
+        self.ledm_status.bypass_cartridge_auth = bypass
+        self.ledm_status.spoof_genuine_status = spoof
+        self.policy_store.settings.bypass_cartridge_auth = bypass
+        self.policy_store.settings.spoof_genuine_status = spoof
+        self._update_supplies_ui()
+        self._evaluate_global_status()
+        self._log(f"Cartridge bypass updated: Bypass={bypass}, SpoofGenuine={spoof}")
+
     def _evaluate_global_status(self):
         can_ledm, ledm_reason = self.ledm_status.can_print()
         printer_name = self.printer_combo.get()
         has_perm, _ = self.spooler.verify_print_permission(printer_name) if printer_name else (False, "")
 
         if can_ledm and has_perm:
-            self.status_badge.config(text="● READY TO PRINT", bg=self.COLOR_SUCCESS)
+            if self.ledm_status.bypass_cartridge_auth and (self.ledm_status.black_ink.is_blocked() or self.ledm_status.color_ink.is_blocked()):
+                self.status_badge.config(text="● READY TO PRINT (AUTH BYPASS)", bg="#8B5CF6")
+            else:
+                self.status_badge.config(text="● READY TO PRINT", bg=self.COLOR_SUCCESS)
         else:
             reason = ledm_reason if not can_ledm else "Spooler Blocked"
             self.status_badge.config(text=f"● ATTENTION: {reason.upper()}", bg=self.COLOR_DANGER)
@@ -331,15 +390,39 @@ class PrinterAssistantApp(tk.Tk):
         self._update_supplies_ui()
 
     def _update_supplies_ui(self):
+        # Update Auth Pill
+        bypass_active = self.var_bypass_auth.get()
+        if bypass_active:
+            spoof_text = " + SPOOF GENUINE OEM" if self.var_spoof_genuine.get() else ""
+            self.lbl_auth_pill.config(
+                text=f"🛡️ CARTRIDGE AUTH BYPASS: ACTIVE{spoof_text}",
+                bg="#8B5CF6",
+                fg="#FFFFFF"
+            )
+        else:
+            self.lbl_auth_pill.config(
+                text="⚠️ CARTRIDGE AUTH: STRICT ENFORCEMENT",
+                bg="#EF4444",
+                fg="#FFFFFF"
+            )
+
         # Black
         b_pct = self.ledm_status.black_ink.level_percent
+        b_st = self.ledm_status.black_ink.status
         self.prog_black["value"] = b_pct
-        self.lbl_black_pct.config(text=f"{b_pct}% - {self.ledm_status.black_ink.status}")
+        if bypass_active and self.ledm_status.black_ink.is_blocked():
+            self.lbl_black_pct.config(text=f"{b_pct}% - {b_st} (Auth Bypassed)", fg="#8B5CF6")
+        else:
+            self.lbl_black_pct.config(text=f"{b_pct}% - {b_st}", fg=self.COLOR_MUTED)
 
         # Color
         c_pct = self.ledm_status.color_ink.level_percent
+        c_st = self.ledm_status.color_ink.status
         self.prog_color["value"] = c_pct
-        self.lbl_color_pct.config(text=f"{c_pct}% - {self.ledm_status.color_ink.status}")
+        if bypass_active and self.ledm_status.color_ink.is_blocked():
+            self.lbl_color_pct.config(text=f"{c_pct}% - {c_st} (Auth Bypassed)", fg="#8B5CF6")
+        else:
+            self.lbl_color_pct.config(text=f"{c_pct}% - {c_st}", fg=self.COLOR_MUTED)
 
         # Tray
         tray_st = self.ledm_status.input_tray_state
@@ -358,28 +441,44 @@ class PrinterAssistantApp(tk.Tk):
         self._log("Simulated hardware event: Input Tray Paper Out")
 
     def _sim_low_ink(self):
-        self.ledm_status.black_ink.level_percent = 5
-        self.ledm_status.black_ink.status = "Low"
-        self.ledm_status.color_ink.level_percent = 8
-        self.ledm_status.color_ink.status = "Low"
+        self.ledm_status.black_ink.level_percent = 0
+        self.ledm_status.black_ink.status = "Empty"
+        self.ledm_status.color_ink.level_percent = 0
+        self.ledm_status.color_ink.status = "Empty"
         self._update_supplies_ui()
-        self._log("Simulated hardware event: Ink Supplies Low")
+        self._log("Simulated hardware event: Cartridges Depleted (Empty)")
+
+    def _sim_non_hp(self):
+        self.ledm_status.black_ink.status = "NonHP"
+        self.ledm_status.black_ink.is_genuine_hp = False
+        self.ledm_status.black_ink.auth_state = "ThirdPartyNonHP"
+        self.ledm_status.color_ink.status = "Refilled"
+        self.ledm_status.color_ink.is_genuine_hp = False
+        self.ledm_status.color_ink.auth_state = "Refilled"
+        self._update_supplies_ui()
+        self._log("Simulated hardware event: Inserted Non-HP / Refilled Third-Party Cartridges")
 
     def _sim_reset_ok(self):
         self.ledm_status.input_tray_state = "Ready"
         self.ledm_status.black_ink.level_percent = 85
         self.ledm_status.black_ink.status = "Ready"
+        self.ledm_status.black_ink.is_genuine_hp = True
+        self.ledm_status.black_ink.auth_state = "GenuineOEM"
         self.ledm_status.color_ink.level_percent = 90
         self.ledm_status.color_ink.status = "Ready"
+        self.ledm_status.color_ink.is_genuine_hp = True
+        self.ledm_status.color_ink.auth_state = "GenuineOEM"
         self._update_supplies_ui()
-        self._log("Simulated hardware event: Restored Normal Readiness")
+        self._log("Simulated hardware event: Restored Genuine OEM Ready State")
 
     def _save_policies(self):
         self.policy_store.settings.analytics_opt_in = self.var_optin.get()
         self.policy_store.settings.can_access_internet = self.var_internet.get()
         self.policy_store.settings.fw_update_setting = self.fw_combo.get()
+        self.policy_store.settings.bypass_cartridge_auth = self.var_bypass_auth.get()
+        self.policy_store.settings.spoof_genuine_status = self.var_spoof_genuine.get()
         self.policy_store.save()
-        self._log(f"Policies saved to settings.ini (OptIn={self.var_optin.get()}, Internet={self.var_internet.get()})")
+        self._log(f"Policies saved to settings.ini (BypassAuth={self.var_bypass_auth.get()}, SpoofGenuine={self.var_spoof_genuine.get()})")
         messagebox.showinfo("Policies Saved", "System policies successfully saved to settings.ini.")
 
     def _send_test_print(self):

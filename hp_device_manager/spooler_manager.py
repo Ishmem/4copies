@@ -152,9 +152,10 @@ class SpoolerManager:
                 return False, "Invalid printer name (ERROR_INVALID_PRINTER_NAME)"
             return False, f"Win32 Error Code: {err}"
 
-    def get_printer_status(self, printer_name: str) -> PrinterStatusReport:
+    def get_printer_status(self, printer_name: str, ignore_cartridge_lock: bool = True) -> PrinterStatusReport:
         """
         Queries queue status, job count, and active hardware error flags.
+        When ignore_cartridge_lock is True, NO_TONER and USER_INTERVENTION cartridge locks are ignored.
         """
         if not self.is_windows:
             return PrinterStatusReport(
@@ -248,7 +249,21 @@ class SpoolerManager:
             if not flags:
                 flags.append("READY")
 
-            can_print = not any(f in flags for f in ("PAPER_JAM", "PAPER_OUT", "NO_TONER", "OFFLINE", "ERROR"))
+            if ignore_cartridge_lock:
+                blocking_errors = ("PAPER_JAM", "PAPER_OUT", "OFFLINE", "ERROR")
+            else:
+                blocking_errors = ("PAPER_JAM", "PAPER_OUT", "NO_TONER", "USER_INTERVENTION_REQUIRED", "OFFLINE", "ERROR")
+
+            can_print = not any(f in flags for f in blocking_errors)
+            has_cartridge_lock = any(f in flags for f in ("NO_TONER", "TONER_LOW", "USER_INTERVENTION_REQUIRED"))
+
+            if can_print:
+                if has_cartridge_lock and ignore_cartridge_lock:
+                    detail = f"Queue ready (Cartridge Lock Bypassed: {', '.join(f for f in flags if f in ('NO_TONER', 'TONER_LOW', 'USER_INTERVENTION_REQUIRED'))})"
+                else:
+                    detail = "Queue is ready for submission"
+            else:
+                detail = f"Queue blocked by: {', '.join(flags)}"
 
             return PrinterStatusReport(
                 printer_name=p_info.pPrinterName or printer_name,
@@ -260,7 +275,7 @@ class SpoolerManager:
                 port_name=p_info.pPortName or "",
                 can_print=can_print,
                 permission_granted=True,
-                detail="Queue is ready for submission" if can_print else f"Queue blocked by: {', '.join(flags)}"
+                detail=detail
             )
         finally:
             self.winspool.ClosePrinter(h_printer)

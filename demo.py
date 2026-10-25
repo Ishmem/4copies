@@ -97,22 +97,36 @@ def run_full_demo():
     policy_store.save()
 
     # ---------------------------------------------------------
-    # STEP 4: LEDM REST-over-USB Protocol Simulation
+    # STEP 4: LEDM REST-over-USB Protocol Simulation & Cartridge Bypass
     # ---------------------------------------------------------
     print("\n" + "-" * 75)
-    print("[+] STEP 4: LEDM XML Protocol Status Evaluation")
+    print("[+] STEP 4: LEDM Protocol & Cartridge Authentication Bypass Verification")
     print("-" * 75)
     ledm_status = LEDMDeviceStatus()
-    can_print, reason = ledm_status.can_print()
-    print(f"    • Device Status:         {'READY' if can_print else 'BLOCKED'} ({reason})")
-    print(f"    • Black Ink Level:       {ledm_status.black_ink.level_percent}% ({ledm_status.black_ink.status})")
-    print(f"    • Color Ink Level:       {ledm_status.color_ink.level_percent}% ({ledm_status.color_ink.status})")
-    print(f"    • Paper Input Tray:      {ledm_status.input_tray_state}")
 
-    # Generate sample XML
-    xml_output = LEDMParser.build_mock_ledm_xml(ledm_status)
-    print("    • Sample LEDM XML Generated (first 160 chars):")
-    print(f"      {xml_output[:160]}...")
+    print("    [Scenario A] Normal OEM Cartridge Status:")
+    can_print, reason = ledm_status.can_print()
+    print(f"      • Status:             {'READY' if can_print else 'BLOCKED'} ({reason})")
+    print(f"      • Black Cartridge:    {ledm_status.black_ink.part_number} ({ledm_status.black_ink.level_percent}% - {ledm_status.black_ink.auth_state})")
+
+    print("\n    [Scenario B] Simulating Third-Party / Refilled Cartridge with DRM Rejection:")
+    ledm_status.black_ink.status = "NonHP"
+    ledm_status.black_ink.is_genuine_hp = False
+    ledm_status.black_ink.auth_state = "ThirdPartyNonHP"
+
+    # Test with bypass disabled (Strict OEM mode)
+    ledm_status.bypass_cartridge_auth = False
+    can_print_strict, reason_strict = ledm_status.can_print()
+    print(f"      • Strict Mode Verdict: {'READY' if can_print_strict else 'BLOCKED'} -> {reason_strict}")
+
+    # Test with bypass enabled (App bypass mode)
+    ledm_status.bypass_cartridge_auth = True
+    can_print_bypass, reason_bypass = ledm_status.can_print()
+    print(f"      • Bypass Mode Verdict: {'READY' if can_print_bypass else 'BLOCKED'} -> {reason_bypass}")
+
+    # Generate spoofed genuine XML
+    spoofed_xml = LEDMParser.build_mock_ledm_xml(ledm_status, force_genuine_spoof=True)
+    print(f"      • Genuine Spoofed XML generated (Disguised as Genuine HP 63 OEM): {len(spoofed_xml)} bytes")
 
     # ---------------------------------------------------------
     # STEP 5: Windows Print Spooler Permission & Queue Audit

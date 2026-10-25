@@ -41,6 +41,12 @@ class PolicySettings:
     can_access_internet: bool = True
     prompt_before_access: bool = False
 
+    # [CartridgePolicy]
+    bypass_cartridge_auth: bool = True
+    spoof_genuine_status: bool = True
+    ignore_low_ink: bool = True
+    force_allow_printing: bool = True
+
 
 class PolicyStore:
     """
@@ -95,6 +101,13 @@ class PolicyStore:
             self.settings.can_access_internet = parser.get("InternetPermissions", "CanAccessInternet", fallback="Yes").lower() in ("yes", "true", "1")
             self.settings.prompt_before_access = parser.get("InternetPermissions", "PromptBeforeAccess", fallback="No").lower() in ("yes", "true", "1")
 
+        # Parse [CartridgePolicy]
+        if parser.has_section("CartridgePolicy"):
+            self.settings.bypass_cartridge_auth = parser.get("CartridgePolicy", "BypassAuthentication", fallback="Yes").lower() in ("yes", "true", "1")
+            self.settings.spoof_genuine_status = parser.get("CartridgePolicy", "SpoofGenuineStatus", fallback="Yes").lower() in ("yes", "true", "1")
+            self.settings.ignore_low_ink = parser.get("CartridgePolicy", "IgnoreLowInkWarning", fallback="Yes").lower() in ("yes", "true", "1")
+            self.settings.force_allow_printing = parser.get("CartridgePolicy", "ForceAllowPrinting", fallback="Yes").lower() in ("yes", "true", "1")
+
         return self.settings
 
     def save(self) -> None:
@@ -126,6 +139,12 @@ class PolicyStore:
         parser["InternetPermissions"] = {
             "CanAccessInternet": "Yes" if self.settings.can_access_internet else "No",
             "PromptBeforeAccess": "Yes" if self.settings.prompt_before_access else "No",
+        }
+        parser["CartridgePolicy"] = {
+            "BypassAuthentication": "Yes" if self.settings.bypass_cartridge_auth else "No",
+            "SpoofGenuineStatus": "Yes" if self.settings.spoof_genuine_status else "No",
+            "IgnoreLowInkWarning": "Yes" if self.settings.ignore_low_ink else "No",
+            "ForceAllowPrinting": "Yes" if self.settings.force_allow_printing else "No",
         }
 
         # Atomic write pattern

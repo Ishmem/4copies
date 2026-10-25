@@ -86,9 +86,13 @@ class DeviceMonitorService:
         """Executes a single check and state synchronization cycle."""
         # 1. Reload policies in case settings.ini changed
         self.policy_store.load()
+        bypass_auth = self.policy_store.settings.bypass_cartridge_auth
+        self.device_status.bypass_cartridge_auth = bypass_auth
+        self.device_status.spoof_genuine_status = self.policy_store.settings.spoof_genuine_status
+        self.device_status.ignore_low_ink = self.policy_store.settings.ignore_low_ink
 
         # 2. Check Windows Spooler Queue
-        spooler_report = self.spooler.get_printer_status(self.target_printer)
+        spooler_report = self.spooler.get_printer_status(self.target_printer, ignore_cartridge_lock=bypass_auth)
         has_permission, perm_detail = self.spooler.verify_print_permission(self.target_printer)
 
         # 3. Check Physical Device Health (LEDM)
@@ -100,6 +104,11 @@ class DeviceMonitorService:
             "timestamp": int(time.time()),
             "printer_name": self.target_printer,
             "overall_ready_to_print": overall_ready,
+            "cartridge_auth": {
+                "bypass_enabled": bypass_auth,
+                "spoof_genuine": self.policy_store.settings.spoof_genuine_status,
+                "status": "AUTHENTICATION_BYPASSED" if bypass_auth else "STRICT_OEM_ENFORCEMENT",
+            },
             "spooler": {
                 "online": spooler_report.is_online,
                 "status_flags": spooler_report.status_flags,

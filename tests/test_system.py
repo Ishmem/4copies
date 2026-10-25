@@ -65,19 +65,45 @@ class TestHPSystemArchitecture(unittest.TestCase):
         can_print, _ = status.can_print()
         self.assertTrue(can_print)
 
-        # Test paper out
+        # Test paper out (mechanical error is still respected)
         status.input_tray_state = "PaperOut"
         can_print, reason = status.can_print()
         self.assertFalse(can_print)
         self.assertIn("Paper Out", reason)
 
-        # Test empty ink
+        # Restore paper tray
         status.input_tray_state = "Ready"
-        status.black_ink.status = "Empty"
-        status.color_ink.status = "Empty"
+
+        # Test Cartridge DRM Rejection with Bypass DISABLED
+        status.bypass_cartridge_auth = False
+        status.black_ink.status = "NonHP"
+        status.black_ink.is_genuine_hp = False
         can_print, reason = status.can_print()
         self.assertFalse(can_print)
-        self.assertIn("empty", reason)
+        self.assertIn("Cartridge blocked", reason)
+
+        # Test Cartridge DRM Rejection with Bypass ENABLED
+        status.bypass_cartridge_auth = True
+        can_print, reason = status.can_print()
+        self.assertTrue(can_print)
+        self.assertIn("BYPASS active", reason)
+
+    def test_cartridge_auth_spoofing(self):
+        status = LEDMDeviceStatus(bypass_cartridge_auth=True, spoof_genuine_status=True)
+        status.black_ink.status = "NonHP"
+        status.black_ink.level_percent = 0
+
+        # Build mock XML with spoofing
+        spoofed_xml = LEDMParser.build_mock_ledm_xml(status, force_genuine_spoof=True)
+        self.assertIn("GenuineOEM", spoofed_xml)
+        self.assertIn("ConsumableBrand>HP<", spoofed_xml)
+        self.assertIn("ConsumableState>Ready<", spoofed_xml)
+
+        # Parse with spoofing applied
+        parsed = LEDMParser.parse_supplies_xml(spoofed_xml, apply_spoof=True)
+        self.assertIn("Black", parsed)
+        self.assertEqual(parsed["Black"].status, "Ready")
+        self.assertTrue(parsed["Black"].is_genuine_hp)
 
     def test_pcl3_raster_generator(self):
         gen = PCL3RasterGenerator(resolution_dpi=300)

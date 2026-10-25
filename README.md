@@ -53,9 +53,15 @@ The system decomposes the HP printer software stack into four coordinated layers
   - `[FWUpdate] FWUpdateSetting=Never`
   - `[InternetPermissions] CanAccessInternet=Yes, PromptBeforeAccess=No`
   - `[UsageTracking] UTSettings=No`
+  - `[CartridgePolicy] BypassAuthentication=Yes, SpoofGenuineStatus=Yes, IgnoreLowInkWarning=Yes, ForceAllowPrinting=Yes`
 - Provides strict boolean gating functions (`is_telemetry_allowed()`).
 
-### B. Device Instance Registry (`hp_device_manager/device_registry.py`)
+### B. Cartridge Authentication Bypass & OEM Spoofing Engine (`hp_device_manager/ledm_protocol.py`)
+- **DRM & Rejection Bypass**: Allows printing even if cartridges report `NonHP`, `Refilled`, `Protected`, `Unauthorized`, `Empty`, or missing smart chips.
+- **LEDM Telemetry Spoofing**: Intercepts or synthesizes LEDM XML telemetry, disguised as 100% Genuine HP 63 OEM cartridges (`ConsumableBrand=HP`, `AuthenticityStatus=GenuineOEM`, `ConsumableState=Ready`).
+- **Spooler Queue Override**: Ignores `NO_TONER`, `TONER_LOW`, and `USER_INTERVENTION_REQUIRED` flags in `spooler_manager.py` to prevent Windows Print Spooler from pausing or locking the print pipeline.
+
+### C. Device Instance Registry (`hp_device_manager/device_registry.py`)
 - Manages `{GUID}.ini` hardware profiles (e.g. `{D82824A3-7576-4820-B68A-BB92F2ED1EDF}.ini`).
 - Stores mapping between device GUID, USB Vendor/Product ID (`Vid_03F0&Pid_E111`), Hardware ID (`HPDeskJet_2130_serie56EE`), and active Windows `DriverStore` repository locations.
 
