@@ -1,0 +1,3 @@
+# HP DeskJet 2130 System Architecture & Device Spooler Manager
+# The core library and service use Python 3.8+ Standard Library and ctypes (winspool.drv).
+# No mandatory external pip dependencies are required.
